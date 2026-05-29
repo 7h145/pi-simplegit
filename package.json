@@ -1,0 +1,16 @@
+{
+  "name": "pi-simplegit",
+  "version": "0.1.0",
+  "description": "Tiny Pi extension for simple git save-progress commits.",
+  "type": "module",
+  "license": "CC-BY-4.0",
+  "keywords": ["pi-package", "pi", "git", "commit"],
+  "pi": {
+    "extensions": ["./pi-simplegit.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
