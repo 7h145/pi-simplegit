@@ -250,32 +250,44 @@ async function saveProgress(pi: ExtensionAPI, ctx: ExtensionContext, options: Sa
 export default function (pi: ExtensionAPI) {
 	let autoEnabled = false;
 	let autoTimer: NodeJS.Timeout | undefined;
-	let idleSince = Date.now();
 	let autoCommitRunning = false;
+	let autoSaveTask: Promise<void> | undefined;
+	let autoSavePending = false;
+	let sessionActive = false;
 	let lastStagedWarningAt = 0;
 
+	function clearAutoTimer(): void {
+		if (!autoTimer) return;
+		clearTimeout(autoTimer);
+		autoTimer = undefined;
+	}
+
 	function scheduleAutoSave(ctx: ExtensionContext): void {
-		if (!autoEnabled) return;
-		if (autoTimer) clearTimeout(autoTimer);
+		if (!sessionActive || !autoEnabled || !autoSavePending) return;
+		clearAutoTimer();
 
 		autoTimer = setTimeout(() => {
-			void maybeAutoSave(ctx);
+			autoTimer = undefined;
+			autoSaveTask = (async () => {
+				try {
+					await maybeAutoSave(ctx);
+				} catch (error) {
+					if (sessionActive) {
+						const message = error instanceof Error ? error.message : String(error);
+						ctx.ui.notify(`pi-simplegit auto: ${message}`, "error");
+					}
+				} finally {
+					autoSaveTask = undefined;
+				}
+			})();
 		}, AUTO_IDLE_DELAY_MS);
 	}
 
 	async function maybeAutoSave(ctx: ExtensionContext): Promise<void> {
-		if (!autoEnabled || autoCommitRunning) return;
+		if (!sessionActive || !autoEnabled || !autoSavePending || autoCommitRunning) return;
 
-		if (!ctx.isIdle()) {
-			scheduleAutoSave(ctx);
-			return;
-		}
-
-		const idleFor = Date.now() - idleSince;
-		if (idleFor < AUTO_IDLE_DELAY_MS) {
-			autoTimer = setTimeout(() => void maybeAutoSave(ctx), AUTO_IDLE_DELAY_MS - idleFor);
-			return;
-		}
+		if (!ctx.isIdle()) return;
+		autoSavePending = false;
 
 		const repoRoot = await getRepoRoot(pi, ctx.cwd);
 		if (!repoRoot) return;
@@ -293,6 +305,11 @@ export default function (pi: ExtensionAPI) {
 
 		const summary = await getAutoSummary(pi, repoRoot);
 		if (!summary || summary.changedLines <= AUTO_MIN_CHANGED_LINES || summary.files.length === 0) return;
+		if (!sessionActive) return;
+		if (!ctx.isIdle()) {
+			autoSavePending = true;
+			return;
+		}
 
 		autoCommitRunning = true;
 		try {
@@ -303,18 +320,28 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	pi.on("session_start", async () => {
+		sessionActive = true;
+	});
+
 	pi.on("agent_start", async () => {
-		idleSince = 0;
+		clearAutoTimer();
 	});
 
-	pi.on("agent_end", async (_event, ctx) => {
-		idleSince = Date.now();
+	pi.on("agent_settled", async (_event, ctx) => {
 		scheduleAutoSave(ctx);
 	});
 
-	pi.on("tool_result", async (event, ctx) => {
+	pi.on("tool_result", async (event) => {
 		if (!autoEnabled || event.isError || !AUTO_MUTATING_TOOLS.has(event.toolName)) return;
-		scheduleAutoSave(ctx);
+		autoSavePending = true;
+	});
+
+	pi.on("session_shutdown", async () => {
+		sessionActive = false;
+		autoSavePending = false;
+		clearAutoTimer();
+		await autoSaveTask;
 	});
 
 	pi.registerCommand("save-progress", {
@@ -339,7 +366,10 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			if (!autoEnabled && autoTimer) clearTimeout(autoTimer);
+			if (!autoEnabled) {
+				autoSavePending = false;
+				clearAutoTimer();
+			}
 			ctx.ui.notify(
 				`pi-simplegit auto-save ${autoEnabled ? "enabled" : "disabled"} (> ${AUTO_MIN_CHANGED_LINES} changed lines, ${AUTO_IDLE_DELAY_MS / 1000}s idle)`,
 				"info",
