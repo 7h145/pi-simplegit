@@ -212,23 +212,29 @@ async function generateSubject(
 		timestamp: Date.now(),
 	};
 
-	const response = await complete(
-		ctx.model,
-		{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-		{
-			apiKey: auth.apiKey,
-			headers: auth.headers,
-			env: auth.env,
-			maxTokens: 100,
-			signal: signal ?? ctx.signal,
-		},
-	);
+	try {
+		const response = await complete(
+			ctx.model,
+			{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
+			{
+				apiKey: auth.apiKey,
+				headers: auth.headers,
+				env: auth.env,
+				maxTokens: 100,
+				signal: signal ?? ctx.signal,
+			},
+		);
 
-	if (response.stopReason === "aborted") return undefined;
-	return cleanSubject(firstText(response));
+		if (response.stopReason === "aborted" || response.stopReason === "error") return undefined;
+		return cleanSubject(firstText(response));
+	} catch {
+		return undefined;
+	}
 }
 
 async function saveProgress(pi: ExtensionAPI, ctx: ExtensionContext, options: SaveOptions = {}): Promise<SaveResult> {
+	if (options.signal?.aborted) return { ok: false, message: "Save cancelled." };
+
 	const repoRoot = await getRepoRoot(pi, ctx.cwd);
 	if (!repoRoot) return { ok: false, message: "Not inside a git repository." };
 
@@ -257,6 +263,7 @@ async function saveProgress(pi: ExtensionAPI, ctx: ExtensionContext, options: Sa
 	if (!subject && options.useModel !== false) {
 		subject = await generateSubject(ctx, files, stat.stdout.trim(), diff.stdout, options.signal);
 	}
+	if (options.signal?.aborted) return { ok: false, message: "Save cancelled.", files };
 	if (!subject) subject = cleanSubject(fallbackSubject(files));
 
 	const commit = await git(pi, repoRoot, ["commit", "-m", subject]);
@@ -333,7 +340,7 @@ export default function (pi: ExtensionAPI) {
 
 		autoCommitRunning = true;
 		try {
-			const result = await saveProgress(pi, ctx, { paths: summary.files });
+			const result = await saveProgress(pi, ctx, { paths: summary.files, useModel: false });
 			ctx.ui.notify(`pi-simplegit auto: ${result.message}`, result.ok ? "info" : "error");
 		} finally {
 			autoCommitRunning = false;
