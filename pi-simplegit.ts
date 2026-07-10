@@ -8,17 +8,19 @@
  * - optional `/save-progress-auto on` creates conservative automatic
  *   checkpoints after successful mutating tool calls
  *
- * Strategy: keep the implementation intentionally small and synchronous. Manual
+ * Strategy: keep the implementation intentionally small and serial. Manual
  * saves use `git add -A`; auto-save first checks `git diff --numstat HEAD`
- * without staging, ignores binary files, waits for pi to be idle, requires more
+ * without staging, ignores binary files, waits for pi to settle, requires more
  * than 10 changed text lines, and skips if user-staged changes already exist.
- * Machine-readable file lists come from `git diff --cached --name-only`, not
- * display-oriented `--stat` parsing.
+ * Machine-readable file lists use NUL-delimited git output, not
+ * display-oriented `--stat` parsing. Automatic checkpoints use deterministic
+ * subjects and never send diffs to a model.
  *
- * Author: thias <github.attic@typedef.net>, OpenAI gpt-5.5
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (5.5, 5.6)
  * License: CC BY 4.0
- * Version: 0.1
- * Date: 2026-05-28
+ * Version: 0.2
+ * Date: 2026-07-10
+ * Last verified with Pi: 0.80.6
  */
 
 import type { UserMessage } from "@earendil-works/pi-ai";
