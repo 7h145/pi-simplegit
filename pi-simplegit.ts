@@ -21,7 +21,8 @@
  * Date: 2026-05-28
  */
 
-import { complete, type UserMessage } from "@earendil-works/pi-ai";
+import type { UserMessage } from "@earendil-works/pi-ai";
+import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,6 +41,7 @@ interface SaveOptions {
 	message?: string;
 	useModel?: boolean;
 	paths?: string[];
+	signal?: AbortSignal;
 }
 
 interface SaveResult {
@@ -166,11 +168,12 @@ async function generateSubject(
 	files: string[],
 	diffStat: string,
 	diff: string,
+	signal?: AbortSignal,
 ): Promise<string | undefined> {
 	if (!ctx.model) return undefined;
 
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey) return undefined;
+	if (!auth.ok) return undefined;
 
 	const clippedDiff = diff.length > 20_000 ? diff.slice(0, 20_000) + "\n... diff truncated ..." : diff;
 	const userMessage: UserMessage = {
@@ -196,7 +199,13 @@ async function generateSubject(
 	const response = await complete(
 		ctx.model,
 		{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-		{ apiKey: auth.apiKey, headers: auth.headers, signal: ctx.signal },
+		{
+			apiKey: auth.apiKey,
+			headers: auth.headers,
+			env: auth.env,
+			maxTokens: 100,
+			signal: signal ?? ctx.signal,
+		},
 	);
 
 	if (response.stopReason === "aborted") return undefined;
@@ -226,7 +235,7 @@ async function saveProgress(pi: ExtensionAPI, ctx: ExtensionContext, options: Sa
 
 	let subject = options.message ? cleanSubject(options.message) : undefined;
 	if (!subject && options.useModel !== false) {
-		subject = await generateSubject(ctx, files, stat.stdout.trim(), diff.stdout);
+		subject = await generateSubject(ctx, files, stat.stdout.trim(), diff.stdout, options.signal);
 	}
 	if (!subject) subject = fallbackSubject(files);
 
@@ -350,8 +359,8 @@ export default function (pi: ExtensionAPI) {
 			message: Type.Optional(Type.String({ description: "Optional commit subject to use instead of generating one." })),
 			useModel: Type.Optional(Type.Boolean({ description: "Generate a commit subject with the active model. Defaults to true." })),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const result = await saveProgress(pi, ctx, params);
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const result = await saveProgress(pi, ctx, { ...params, signal });
 			if (!result.ok) throw new Error(result.message);
 
 			return {
