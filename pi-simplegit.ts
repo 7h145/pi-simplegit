@@ -93,15 +93,25 @@ function fallbackSubject(files: string[]): string {
 	return files.length === 1 ? `chore: update ${files[0].split("/").pop()}` : `chore: update ${files.length} files`;
 }
 
-function parseNumstat(text: string): NumstatSummary {
+function parseNumstatZ(text: string): NumstatSummary {
 	let changedLines = 0;
 	const files: string[] = [];
 
-	for (const line of text.split("\n")) {
-		if (!line.trim()) continue;
-		const [added, deleted, path] = line.split("\t");
+	for (const record of text.split("\0")) {
+		if (!record) continue;
+		const firstTab = record.indexOf("\t");
+		const secondTab = firstTab < 0 ? -1 : record.indexOf("\t", firstTab + 1);
+		if (firstTab < 0 || secondTab < 0) continue;
+
+		const added = record.slice(0, firstTab);
+		const deleted = record.slice(firstTab + 1, secondTab);
+		const path = record.slice(secondTab + 1);
 		if (!path || added === "-" || deleted === "-") continue; // ignore binary files for auto mode
-		changedLines += Number(added) + Number(deleted);
+
+		const addedCount = Number(added);
+		const deletedCount = Number(deleted);
+		if (!Number.isFinite(addedCount) || !Number.isFinite(deletedCount)) continue;
+		changedLines += addedCount + deletedCount;
 		files.push(path);
 	}
 
@@ -137,10 +147,16 @@ async function hasStagedChanges(pi: ExtensionAPI, repoRoot: string): Promise<boo
 }
 
 async function getAutoSummary(pi: ExtensionAPI, repoRoot: string): Promise<NumstatSummary | undefined> {
-	const numstat = await git(pi, repoRoot, ["diff", "--numstat", "HEAD"]);
-	if (numstat.code !== 0) return undefined;
+	const head = await git(pi, repoRoot, ["rev-parse", "--verify", "HEAD"]);
+	let summary: NumstatSummary = { changedLines: 0, files: [] };
+	if (head.code === 0) {
+		const numstat = await git(pi, repoRoot, ["diff", "--numstat", "--no-renames", "-z", "HEAD"]);
+		if (numstat.code !== 0) return undefined;
+		summary = parseNumstatZ(numstat.stdout);
+	}
 
-	const summary = parseNumstat(numstat.stdout);
+	// In a repository without an initial commit, every worktree file is untracked.
+	// Otherwise, add untracked files to the tracked-file numstat summary.
 	const seen = new Set(summary.files);
 
 	const untracked = await git(pi, repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]);
@@ -225,19 +241,23 @@ async function saveProgress(pi: ExtensionAPI, ctx: ExtensionContext, options: Sa
 	const add = await git(pi, repoRoot, addArgs);
 	if (add.code !== 0) return { ok: false, message: add.stderr.trim() || "git add failed." };
 
-	const names = await git(pi, repoRoot, ["diff", "--cached", "--name-only"]);
+	const names = await git(pi, repoRoot, ["diff", "--cached", "--name-only", "-z"]);
 	if (names.code !== 0) return { ok: false, message: names.stderr.trim() || "git diff --name-only failed." };
-	const files = names.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+	const files = parseNulList(names.stdout);
 	if (files.length === 0) return { ok: true, message: "No staged changes to save." };
 
+	if (paths && files.some((file) => !paths.includes(file))) {
+		return { ok: false, message: "Auto-save stopped because unrelated staged changes appeared.", files };
+	}
+
 	const stat = await git(pi, repoRoot, ["diff", "--cached", "--stat"]);
-	const diff = await git(pi, repoRoot, ["diff", "--cached", "--", ...files]);
+	const diff = await git(pi, repoRoot, ["diff", "--cached"]);
 
 	let subject = options.message ? cleanSubject(options.message) : undefined;
 	if (!subject && options.useModel !== false) {
 		subject = await generateSubject(ctx, files, stat.stdout.trim(), diff.stdout, options.signal);
 	}
-	if (!subject) subject = fallbackSubject(files);
+	if (!subject) subject = cleanSubject(fallbackSubject(files));
 
 	const commit = await git(pi, repoRoot, ["commit", "-m", subject]);
 	if (commit.code !== 0) return { ok: false, message: commit.stderr.trim() || "git commit failed.", files };
@@ -384,7 +404,9 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet: "Create a simple git save-progress commit for the current repository.",
 		promptGuidelines: [
 			"Use save_progress when the user asks to save, checkpoint, or commit current progress simply.",
+			"Call save_progress only after file-mutating tools have completed, not in the same parallel tool batch.",
 		],
+		executionMode: "sequential",
 		parameters: Type.Object({
 			message: Type.Optional(Type.String({ description: "Optional commit subject to use instead of generating one." })),
 			useModel: Type.Optional(Type.Boolean({ description: "Generate a commit subject with the active model. Defaults to true." })),
