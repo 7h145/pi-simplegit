@@ -17,7 +17,7 @@
  * subjects and never send diffs to a model.
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (5.5, 5.6)
- * License: CC BY 4.0
+ * License: MIT
  * Version: 0.2
  * Date: 2026-07-10
  * Last verified with Pi: 0.80.6
