@@ -58,37 +58,26 @@ staged diff to the active model provider.
 
 ## Install / try locally
 
-Install the whole `pi-assorted` package from GitHub:
+Install this extension from GitHub:
 
 ```bash
-pi install git:github.com/7h145/pi-assorted
+pi install git:github.com/7h145/pi-simplegit
 ```
 
-For a local targeted install of only `pi-simplegit`:
+This is a personal/global install. Add `-l` for a project-local install.
+Run `/reload` after installing or updating while Pi is running.
+
+If you already use pi-simplegit through `pi-assorted`, disable that copy
+with `pi config` before installing the standalone package.
+
+To try a local checkout without installing, run from its root:
 
 ```bash
-git clone https://github.com/7h145/pi-assorted
-pi install ./pi-assorted/extensions/pi-simplegit -l
+pi --no-extensions -e .
 ```
 
-To try it temporarily without installing:
-
-```bash
-git clone https://github.com/7h145/pi-assorted
-pi -e ./pi-assorted/extensions/pi-simplegit
-```
-
-Or load the single extension file directly:
-
-```bash
-pi -e ./pi-assorted/extensions/pi-simplegit/pi-simplegit.ts
-```
-
-Then reload Pi if needed:
-
-```text
-/reload
-```
+This loads only the checkout's extension, avoiding duplicate commands and tools
+from an installed copy.
 
 ## Notes
 
