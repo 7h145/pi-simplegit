@@ -56,7 +56,7 @@ The assistant can use it when the user asks to save/checkpoint/commit progress.
 Set `useModel: false` to use a deterministic local subject and avoid sending the
 staged diff to the active model provider.
 
-## Install / try locally
+## Installation
 
 Install this extension from GitHub:
 
@@ -67,9 +67,6 @@ pi install git:github.com/7h145/pi-simplegit
 This is a personal/global install. Add `-l` for a project-local install.
 Run `/reload` after installing or updating while Pi is running.
 
-If you already use pi-simplegit through `pi-assorted`, disable that copy
-with `pi config` before installing the standalone package.
-
 To try a local checkout without installing, run from its root:
 
 ```bash
@@ -78,6 +75,22 @@ pi --no-extensions -e .
 
 This loads only the checkout's extension, avoiding duplicate commands and tools
 from an installed copy.
+
+### Migrating from pi-assorted
+
+If you have the legacy [`pi-assorted`](https://github.com/7h145/pi-assorted)
+collection installed, turn off its pi-simplegit extension before installing this
+standalone version. Otherwise Pi will try to load the same extension twice.
+
+Run `pi config` in a terminal. Under the `pi-assorted` package's Extensions
+entries, select `pi-simplegit/pi-simplegit.ts` and press Space to uncheck it
+(`[ ]`). Changes are saved immediately; press Esc to close.
+
+For a project-local collection installation, run `pi config -l` from that
+project and press Space until the entry shows `[-]` (project unload).
+
+See Pi's [resource settings reference](https://pi.dev/docs/latest/settings#resources)
+for configuration details.
 
 ## Notes
 
