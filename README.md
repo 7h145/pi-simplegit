@@ -7,7 +7,7 @@
 > incorrectly report success after a timed-out Git command.
 > See [Compatibility and modernization](./DEVELOPMENT.md#compatibility-and-modernization)
 > for the current limits and why reliable automatic checkpointing warrants a
-> rewrite. No replacement is available from this repository.
+> rewrite.
 
 Archived Pi extension for Git checkpoints.
 
@@ -23,8 +23,7 @@ No persistent worker and no multi-commit grouping. Manual mode is the default;
 an optional auto-save mode uses a session-scoped timer to checkpoint after tool
 changes. Use `.gitignore` for files that should never be committed.
 
-The advertised minimum is Pi 0.80.4. This is not a current support guarantee;
-see the [compatibility baseline](./DEVELOPMENT.md#compatibility-baseline).
+Requires Pi 0.80.4 or newer.
 
 ## Commands
 
