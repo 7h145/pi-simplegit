@@ -1,8 +1,17 @@
 # pi-simplegit
 
-Tiny Pi extension for boring, reliable git checkpoints.
+> [!IMPORTANT]
+> This repository is archived and no longer maintained. It retains the source
+> and history for reference and existing installations. Automatic checkpoints
+> have known correctness and cancellation problems; even a manual save can
+> incorrectly report success after a timed-out Git command.
+> See [Compatibility and modernization](./DEVELOPMENT.md#compatibility-and-modernization)
+> for the current limits and why reliable automatic checkpointing warrants a
+> rewrite. No replacement is available from this repository.
 
-It intentionally does **one** commit at a time:
+Archived Pi extension for Git checkpoints.
+
+Each save attempts **one** commit:
 
 1. verify the current directory is inside a git repo
 2. `git add -A`
@@ -14,7 +23,8 @@ No persistent worker and no multi-commit grouping. Manual mode is the default;
 an optional auto-save mode uses a session-scoped timer to checkpoint after tool
 changes. Use `.gitignore` for files that should never be committed.
 
-Requires Pi 0.80.4 or newer.
+The advertised minimum is Pi 0.80.4. This is not a current support guarantee;
+see the [compatibility baseline](./DEVELOPMENT.md#compatibility-baseline).
 
 ## Commands
 
@@ -34,14 +44,18 @@ such as `chore: update 3 files`.
 With an argument, the argument is used as the commit subject and no model call
 is made.
 
-`/save-progress-auto on` enables conservative automatic checkpoints after
-successful `write`, `edit`, or `bash` tool calls. It waits until Pi has fully
-settled and remained idle for 10 seconds, checks `git diff --numstat HEAD`
+`/save-progress-auto on` enables automatic checkpoints intended to be
+conservative, after successful `write`, `edit`, or `bash` tool calls. It waits
+until Pi has fully settled and remained idle for 10 seconds, checks
+`git diff --numstat HEAD`
 without staging first, and only commits when there are more than 10 changed text
-lines. Binary files are ignored for auto-save. If staged user changes already
-exist, auto-save skips the commit and shows a small warning instead of
-committing them. Automatic checkpoints use deterministic fallback subjects and
-do not send diffs to a model. Auto-save state is session-local and resets on
+lines. The preflight plan excludes binary files. If it finds staged user changes,
+auto-save normally skips the commit and shows a small warning. These checks do
+not guarantee that a later commit excludes concurrently staged work, or that
+staging affects only the planned files; see the
+[known correctness problems](./DEVELOPMENT.md#known-correctness-problems).
+Automatic checkpoints use deterministic fallback subjects and do not send diffs
+to a model. Auto-save state is session-local and resets on
 reload or session replacement.
 
 ## Tool
@@ -94,6 +108,8 @@ for configuration details.
 
 ## Notes
 
+- Archive rationale and compatibility limits are in
+  [`DEVELOPMENT.md`](./DEVELOPMENT.md).
 - `git add -A` respects `.gitignore` for untracked files.
 - Keep runtime/scratch paths in `.gitignore`, e.g. `.agents/run/`, `tmp/`, and
   notebook cache directories.
